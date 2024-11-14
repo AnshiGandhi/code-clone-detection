@@ -1,45 +1,34 @@
-from datasets import load_dataset
-from transformers import BertTokenizer, BertModel
 import numpy as np
 import torch
+from datasets import load_dataset
+from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Load dataset from jsonl file
-#dataset = load_dataset('json', data_files='train.jsonl')
-
-# Load BERT tokenizer
-#tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-
-# Tokenize the dataset
-# def tokenize_code(example):
-#     # Tokenize the 'code' field with padding and truncation
-#     return tokenizer(
-#         example['code'], 
-#         padding='max_length', 
-#         truncation=True, 
-#         max_length=512  # Adjusted for BERT's limit
-#     )
-
-# Apply the tokenizer on the entire dataset
-# tokenized_dataset = dataset.map(tokenize_code, batched=True)
+# Step 1: Load datasets for fine-tuning
+train_dataset = load_dataset('json', data_files='traincopy.json')['train']
+valid_dataset = load_dataset('json', data_files='validcopy.json')['train']
+test_dataset = load_dataset('json', data_files='testcopy.json')['train']
 
 
-# Load the dataset from JSONL file
-dataset = load_dataset('json', data_files='train.jsonl')['train']
+def process_labels(example):
+    example['label'] = int(example['label'])  # Convert label from string to integer
+    return example
 
-# Set a limit to reduce dataset size if needed
-LIMIT = 100  # Adjust based on available memory and time constraints
-dataset = dataset.shuffle(seed=42).select(range(min(LIMIT, len(dataset))))
 
-# Load BERT tokenizer and model
+train_dataset = train_dataset.map(process_labels)
+valid_dataset = valid_dataset.map(process_labels)
+test_dataset = test_dataset.map(process_labels)
+
+
+# Load BERT tokenizer and pre-trained BERT model
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-model = BertModel.from_pretrained("bert-base-uncased")
+model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=81)
 
-# Use GPU if available for faster processing
+# Move model to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
-# Tokenize the dataset
+# Tokenize datasets
 def tokenize_code(example):
     return tokenizer(
         example['code'], 
@@ -48,11 +37,35 @@ def tokenize_code(example):
         max_length=512
     )
 
-# Apply tokenization to the dataset
-tokenized_dataset = dataset.map(tokenize_code, batched=True)
+train_dataset = train_dataset.map(tokenize_code, batched=True)
+valid_dataset = valid_dataset.map(tokenize_code, batched=True)
 
-# Extract original code snippets for later use
-candidate_snippets = [example['code'] for example in dataset]
+# Define TrainingArguments and Trainer
+training_args = TrainingArguments(
+    output_dir='./results',
+    evaluation_strategy="epoch",
+    per_device_train_batch_size=8,
+    per_device_eval_batch_size=8,
+    num_train_epochs=3,
+    logging_dir='./logs',
+    logging_steps=10,
+    save_steps=10_000,
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    eval_dataset=valid_dataset
+)
+
+# Fine-tune the model
+trainer.train()
+
+# Step 2: Embedding generation for similarity retrieval
+# Load candidate snippets from candidates.json
+candidate_dataset = load_dataset('json', data_files='candidates.json')['train']
+candidate_snippets = [example['code'] for example in candidate_dataset]
 
 # Function to compute embeddings for a batch of code snippets
 def get_batch_embeddings(snippets):
@@ -63,12 +76,11 @@ def get_batch_embeddings(snippets):
     inputs = {key: value.to(device) for key, value in inputs.items()}
     
     with torch.no_grad():
-        outputs = model(**inputs)
-    
+        outputs = model.bert(**inputs)  # Directly access BERT part of model
     return outputs.last_hidden_state[:, 0, :].cpu().numpy()  # CLS token embeddings
 
-# Generate embeddings for all candidate snippets in batches
-batch_size = 16  # Adjust based on available memory
+# Generate embeddings for candidate snippets in batches
+batch_size = 16
 candidate_embeddings = []
 
 for i in range(0, len(candidate_snippets), batch_size):
@@ -76,7 +88,7 @@ for i in range(0, len(candidate_snippets), batch_size):
     batch_embeddings = get_batch_embeddings(batch)
     candidate_embeddings.extend(batch_embeddings)
 
-# Convert embeddings to NumPy array for efficient computation
+# Convert embeddings to a NumPy array for cosine similarity calculation
 candidate_embeddings = np.array(candidate_embeddings)
 
 # Function to retrieve top K semantically similar snippets
@@ -91,38 +103,22 @@ def retrieve_top_k_similar(query_code, K):
     
     return top_k_snippets, top_k_scores
 
-# Example usage
-query_code = """int main(int argc, char* argv[]) {
-    int shu[number];
-    int n, i, j;
-    int k = 0;
-    scanf("%d", &shu[0]);
-    for (n = 0; shu[n] != 0; n++) {
-        scanf("%d", &shu[n + 1]);
+# Example usage with a query code snippet
+query_code = """// Sample query code to find top-K similar snippets
+int sumArray(int arr[], int size) {
+    int sum = 0;
+    for (int i = 0; i < size; i++) {
+        sum += arr[i];
     }
-    for (i = 0; i <= n; i++) {
-        for (j = 0; j <= n; j++) {
-            if (shu[i] == 2 * shu[j]) {
-                k++;
-            }
-        }
-    }
-    if (k != 0) {
-        k = k - 1;
-        printf("%d", k);
-    } else printf("%d", k);
-    return 0;
-}"""  # Your query code snippet
+    return sum;
+}"""
+K = 5
 
-K = 5  # Number of top similar snippets to retrieve
-
-# Retrieve the top K similar code snippets
 top_k_snippets, top_k_scores = retrieve_top_k_similar(query_code, K)
 
-# Print the results
+# Print results
 print("Top K Similar Snippets:")
 for i, snippet in enumerate(top_k_snippets):
     print(f"\nSnippet {i + 1}:")
     print(snippet)
     print(f"Similarity Score: {top_k_scores[i]:.4f}")
-
