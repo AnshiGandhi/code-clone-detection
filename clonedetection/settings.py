@@ -51,7 +51,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'clonedetection.urls'
+ROOT_URLCONF = 'codeapi.urls'
 
 TEMPLATES = [
     {
