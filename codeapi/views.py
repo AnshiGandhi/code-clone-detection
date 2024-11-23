@@ -14,6 +14,7 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from .clone_detection_service import process_candidates
 
 @api_view(['POST'])
 def process_request(request):
