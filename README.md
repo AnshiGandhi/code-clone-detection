@@ -13,7 +13,10 @@ This project demonstrates semantic analysis (for C/C++). It provides the top 'K'
 
 ## Virtual environment 
 
-For backend , we have to start virtual environment by using following command : 
+For backend , we have to create and start virtual environment by using following command : 
+```
+python3 -m venv test
+```
 
 ```
 test\Scripts\activate
@@ -52,3 +55,10 @@ After successfully executing above command , frontend will be available at url :
 http://localhost:5173/
 ```
 
+
+## Github link for Frontend
+
+Here is the link of Github (for frontend portion) :
+```
+https://github.com/py-ng/code-clone-detection
+``` 
