@@ -40,19 +40,19 @@ def write_jsonl(file_path, data, batch_size=1000):
             f.writelines(json.dumps(entry) + '\n' for entry in batch)
 
 # Dataset directories
-train_dirs = [f"ProgramData/{i}" for i in range(1, 65)]
-valid_dirs = [f"ProgramData/{i}" for i in range(65, 81)]
-test_dirs = [f"ProgramData/{i}" for i in range(81, 105)]
+train_dirs = [f"ProgramData/{i}" for i in range(1, 105)]
+# valid_dirs = [f"ProgramData/{i}" for i in range(65, 81)]
+# test_dirs = [f"ProgramData/{i}" for i in range(81, 105)]
 
 # Process and write datasets
 train_files = get_files(train_dirs)
 train_data = process_files_in_parallel(train_files)
 write_jsonl("train.jsonl", train_data)
 
-valid_files = get_files(valid_dirs)
-valid_data = process_files_in_parallel(valid_files)
-write_jsonl("valid.jsonl", valid_data)
+# valid_files = get_files(valid_dirs)
+# valid_data = process_files_in_parallel(valid_files)
+# write_jsonl("valid.jsonl", valid_data)
 
-test_files = get_files(test_dirs)
-test_data = process_files_in_parallel(test_files)
-write_jsonl("test.jsonl", test_data)
+# test_files = get_files(test_dirs)
+# test_data = process_files_in_parallel(test_files)
+# write_jsonl("test.jsonl", test_data)
